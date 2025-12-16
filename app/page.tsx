@@ -2,14 +2,9 @@
 import { ChristmasLights } from "@/components/ChristmasLights";
 import { Snowflakes } from "@/components/Snowflakes";
 import { Sparkles } from "@/components/Sparkles";
+import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-
-interface GameState {
-  totalParticipants: number;
-  registeredUsers: number[];
-  takenNumbers: number[];
-}
 
 export default function Home() {
   const [userNumber, setUserNumber] = useState<number>(0);
@@ -20,71 +15,40 @@ export default function Home() {
   const [showGift, setShowGift] = useState(false);
   const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
 
-  const initializeStorage = async () => {
-    try {
-      window.localStorage.getItem("gift-exchange-state");
-      setLoading(false);
-    } catch (err) {
-      setLoading(false);
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    initializeStorage();
+    const init = async () => {
+      const { data, error } = await supabase
+        .from("gift_exchange_state")
+        .select("total_participants")
+        .eq("id", "default")
+        .single();
+
+      if (error || !data) {
+        setError("Permainan belum diatur oleh admin");
+      }
+
+      setLoading(false);
+    };
+
+    init();
   }, []);
 
   const registerUser = async () => {
-    if (!userNumber || isNaN(userNumber) || userNumber < 1) {
-      setError("Masukkan nomor yang valid (minimal 1)");
+    if (!userNumber || userNumber < 1) {
+      setError("Nomor tidak valid");
       return;
     }
 
-    try {
-      let state: GameState = {
-        totalParticipants: 0,
-        registeredUsers: [],
-        takenNumbers: [],
-      };
-      try {
-        const result = window.localStorage.getItem("gift-exchange-state");
-        if (result) {
-          state = JSON.parse(result.valueOf());
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Permainan belum diatur oleh admin");
-        return;
-      }
+    const { data, error } = await supabase.rpc("register_user_number", {
+      p_user_number: userNumber,
+    });
 
-      if (state.totalParticipants === 0) {
-        setError("Permainan belum diatur oleh admin");
-        return;
-      }
-
-      if (userNumber > state.totalParticipants) {
-        setError(`Nomor harus antara 1-${state.totalParticipants}`);
-        return;
-      }
-
-      if (state.registeredUsers.includes(userNumber)) {
-        setError("Nomor ini sudah terdaftar!");
-        return;
-      }
-
-      state.registeredUsers.push(userNumber);
-      await window.localStorage.setItem(
-        "gift-exchange-state",
-        JSON.stringify(state)
-      );
-
-      setIsRegistered(true);
-      setError("");
-    } catch (err) {
-      console.error(err);
-      setError("Terjadi kesalahan. Silakan coba lagi.");
+    if (error || !data) {
+      setError("Nomor sudah terdaftar");
+      return;
     }
+
+    setIsRegistered(true);
   };
 
   const pickNumber = async () => {
@@ -92,59 +56,19 @@ export default function Home() {
     setShowGift(true);
 
     setTimeout(async () => {
-      try {
-        let state: GameState = {
-          totalParticipants: 0,
-          registeredUsers: [],
-          takenNumbers: [],
-        };
-        try {
-          const result = await window.localStorage.getItem(
-            "gift-exchange-state"
-          );
-          if (result) {
-            state = JSON.parse(result.valueOf());
-          }
-        } catch (err) {
-          console.error(err);
-          setError("Gagal mengambil data");
-          setIsAnimating(false);
-          setShowGift(false);
-          return;
-        }
+      const { data, error } = await supabase.rpc("take_random_gift_for_user", {
+        p_user_number: userNumber,
+      });
 
-        const allNumbers = Array.from(
-          { length: state.totalParticipants },
-          (_, i) => i + 1
-        ).filter((num) => num !== userNumber);
-        const availableNumbers = allNumbers.filter(
-          (num) => !state.takenNumbers.includes(num)
-        );
-
-        if (availableNumbers.length === 0) {
-          setError("Tidak ada nomor yang tersedia!");
-          setIsAnimating(false);
-          setShowGift(false);
-          return;
-        }
-
-        const randomIndex = Math.floor(Math.random() * availableNumbers.length);
-        const picked = availableNumbers[randomIndex];
-
-        state.takenNumbers.push(picked);
-        await window.localStorage.setItem(
-          "gift-exchange-state",
-          JSON.stringify(state)
-        );
-
-        setSelectedNumber(picked);
-        setIsAnimating(false);
-      } catch (err) {
-        console.error(err);
-        setError("Terjadi kesalahan");
+      if (error) {
+        setError(error.message);
         setIsAnimating(false);
         setShowGift(false);
+        return;
       }
+
+      setSelectedNumber(data);
+      setIsAnimating(false);
     }, 2000);
   };
 

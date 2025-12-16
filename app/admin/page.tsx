@@ -3,18 +3,14 @@ import { motion } from "framer-motion";
 import { Snowflakes } from "../../components/Snowflakes";
 import { ChristmasLights } from "../../components/ChristmasLights";
 import { useState } from "react";
-
-interface GameState {
-  totalParticipants: number;
-  registeredUsers: number[];
-  takenNumbers: number[];
-}
+import { supabase } from "@/lib/supabase";
 
 function PageAdmin() {
   const [error, setError] = useState("");
   const [totalParticipants, setTotalParticipants] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [isAdminAuth, setIsAdminAuth] = useState(false);
+
   const setupGame = async () => {
     if (
       !totalParticipants ||
@@ -25,35 +21,35 @@ function PageAdmin() {
       return;
     }
 
-    try {
-      const state: GameState = {
-        totalParticipants: parseInt(totalParticipants),
-        registeredUsers: [],
-        takenNumbers: [],
-      };
+    const { error } = await supabase.from("gift_exchange_state").upsert({
+      id: "default",
+      total_participants: parseInt(totalParticipants),
+      registered_users: [],
+      taken_numbers: [],
+    });
 
-      await window.localStorage.setItem(
-        "gift-exchange-state",
-        JSON.stringify(state)
-      );
+    if (error) {
+      setError("Gagal mengatur permainan");
+      console.error(error);
+    } else {
       alert("Permainan berhasil diatur!");
       setError("");
-    } catch (err) {
-      console.error(err);
-      setError("Gagal mengatur permainan");
     }
   };
 
   const resetGame = async () => {
-    if (window.confirm("Reset semua data permainan?")) {
-      try {
-        await window.localStorage.removeItem("gift-exchange-state");
-        alert("Permainan berhasil direset");
-        setTotalParticipants("");
-      } catch (err) {
-        console.error(err);
-        setError("Gagal mereset");
-      }
+    if (!window.confirm("Reset semua data permainan?")) return;
+
+    const { error } = await supabase
+      .from("gift_exchange_state")
+      .delete()
+      .eq("id", "default");
+
+    if (error) {
+      setError("Gagal reset permainan");
+    } else {
+      alert("Permainan berhasil direset");
+      setTotalParticipants("");
     }
   };
 
